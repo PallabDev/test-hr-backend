@@ -55,9 +55,9 @@ const apply = asyncHandler(async (req, res) => {
         return res.status(400).json(new ApiResponse(400, "Resume and ID Proof are required"));
     }
 
-    const resumeUrl = `${BASE_URL}/temp/${resumeFile.filename}`;
-    const idProofUrl = `${BASE_URL}/temp/${idProofFile.filename}`;
-    const additionalDocUrls = `${BASE_URL}/temp/${additionalDocs.filename}`;
+    const resumeUrl = `${BASE_URL}/assets/${resumeFile.filename}`;
+    const idProofUrl = `${BASE_URL}/assets/${idProofFile.filename}`;
+    const additionalDocUrls = `${BASE_URL}/assets/${additionalDocs.filename}`;
 
     const candidate = await Candidate.create({
         firstname,

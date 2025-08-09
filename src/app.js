@@ -19,8 +19,8 @@ const __dirname = path.dirname(__filename);
 // Serve the public folder
 app.use(express.static(path.join(__dirname, "..", "public")));
 
-// Optional: serve only /temp directly
-app.use("/temp", express.static(path.join(__dirname, "..", "public", "temp")));
+// Optional: serve only /assets directly
+app.use("/assets", express.static(path.join(__dirname, "..", "public", "assets")));
 
 
 import userRouter from "./routes/user.routes.js"

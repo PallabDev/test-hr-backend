@@ -9,7 +9,7 @@ const __dirname = path.dirname(__filename);
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
         // Always point to /public/temp in project root
-        const uploadPath = path.join(__dirname, "..", "..", "public", "temp");
+        const uploadPath = path.join(__dirname, "..", "..", "public", "assets");
 
         // Create folder if missing
         fs.mkdirSync(uploadPath, { recursive: true });
