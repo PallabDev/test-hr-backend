@@ -25,5 +25,8 @@ app.use("/assets", express.static(path.join(__dirname, "..", "public", "assets")
 
 import userRouter from "./routes/user.routes.js"
 app.use("/api/v1/user/", userRouter);
+app.get("/uptime", (_, res) => {
+    res.status(200).json({ status: "Up and Running" })
+})
 
 export default app;
