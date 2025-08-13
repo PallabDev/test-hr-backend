@@ -3,7 +3,8 @@ import { ApiError } from "../utils/ApiError.js"
 import { ApiResponse } from "../utils/ApiResponse.js"
 import { User } from "../models/user.model.js"
 import { Candidate } from "../models/cadidate.model.js"
-import { uploadOnCloudinary } from "../utils/cloudinary.js"
+import { Employee } from "../models/employee.model.js"
+
 
 const generateAccessAndRefereshTokens = async (userId) => {
     try {
@@ -21,85 +22,6 @@ const generateAccessAndRefereshTokens = async (userId) => {
         throw new ApiError(500, "Something went wrong while generating referesh and access token")
     }
 }
-
-const apply = asyncHandler(async (req, res) => {
-    const {
-        name,
-        email,
-        phone,
-        address,
-        dob,
-        institute,
-        specialization,
-        achievements,
-    } = req.body;
-
-    // multer puts files in req.files as arrays
-    // Expect files with keys: photo, resume, idProof, galleryImages (multiple)
-
-    if (!req.files) {
-        return res.status(400).json({ message: "Files are required" });
-    }
-
-    // Validate required files
-    const photoFile = req.files.photo?.[0];
-    const resumeFile = req.files.resume?.[0];
-    const idProofFile = req.files.idProof?.[0];
-    const galleryFiles = req.files.galleryImages || [];
-
-    if (!photoFile || !resumeFile || !idProofFile) {
-        return res.status(400).json({ message: "Photo, Resume and ID Proof are required" });
-    }
-
-    const userExist = await Candidate.findOne({ email: email })
-    if (userExist) {
-        throw new ApiError(409, "User with email already exists")
-    }
-
-    // Upload files to Cloudinary
-    const photoUpload = await uploadOnCloudinary(photoFile.path);
-    const resumeUpload = await uploadOnCloudinary(resumeFile.path);
-    const idProofUpload = await uploadOnCloudinary(idProofFile.path);
-
-    // Upload gallery images (if any)
-    const galleryUploads = [];
-    for (const file of galleryFiles) {
-        const uploadResult = await uploadOnCloudinary(file.path);
-        if (uploadResult?.url) {
-            galleryUploads.push(uploadResult.url);
-        }
-    }
-
-    // Delete local files after upload (optional if you didn't do it in uploader)
-    // fs.unlinkSync(photoFile.path); and same for others
-
-    // Create candidate document
-    const candidate = await Candidate.create({
-        name,
-        email,
-        phone,
-        address,
-        dob,
-        education: {
-            institute,
-            specialization,
-        },
-        achievements,
-        photoUrl: photoUpload.url,
-        documents: {
-            resumeUrl: resumeUpload.url,
-            idProofUrl: idProofUpload.url,
-        },
-        galleryImages: galleryUploads,
-    });
-
-    res.status(201).json({
-        message: "Application submitted successfully",
-        candidate,
-    });
-});
-
-
 const userRegistration = asyncHandler(async (req, res) => {
     const { email, fullName, password } = req.body;
     // check not empty
@@ -204,7 +126,6 @@ const logoutUser = asyncHandler(async (req, res) => {
         .clearCookie("refreshToken", options)
         .json(new ApiResponse(200, {}, "User logged Out"))
 })
-
 // Example: controllers/userController.js
 
 const getMe = asyncHandler(async (req, res) => {
@@ -216,61 +137,66 @@ const getMe = asyncHandler(async (req, res) => {
         new ApiResponse(200, user, "User Authenticated")
     );
 })
+function generatePassword(name, dob) {
+    // Extract first name
+    const firstName = name.split(" ")[0].toLowerCase();
 
+    // Extract year from Date object or string
+    const birthYear = new Date(dob).getFullYear();
 
+    // Combine
+    return `${firstName}${birthYear}`;
+}
 
-const getSubmissions = asyncHandler(async (req, res) => {
-    const candidates = await Candidate.find().sort({ createdAt: -1 }); // newest first
-
-    if (!candidates || candidates.length === 0) {
-        return res.status(404).json(new ApiResponse(404, "No submissions found", []));
+const addJob = asyncHandler(async (req, res) => {
+    const { id } = req.user
+    const adminUser = await User.findById(id);
+    if (!adminUser && (adminUser.role !== "admin")) {
+        throw new ApiError(400, "Unauthorized Request!");
     }
 
-    res.status(200).json(new ApiResponse(200, candidates, "Submissions fetched successfully",));
-});
 
+})
 
-const getSubmissionsById = asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const candidate = await Candidate.findById(id);
-    if (!candidate) {
+const addEmployee = asyncHandler(async (req, res) => {
+    const { id } = req.user;
+    const isAdminUser = await User.findOne({ _id: id });
+    if (!isAdminUser && isAdminUser.role !== "admin") {
+        throw new ApiError(404, "Unauthorized Request");
+    }
+    const { cadidateId } = req.body;
+    const candidateUser = await Candidate.findOne({ _id: cadidateId });
+    if (!candidateUser) {
         throw new ApiError(404, "Candidate not found");
     }
-
-    res.status(200).json(new ApiResponse(200, candidate, "Candidate fetched successfully"));
-});
-
-const updateCandidateStatus = asyncHandler(async (req, res) => {
-    const { id } = req.params;
-    const { status } = req.params;
-
-    // Validate input
-    if (!status || !["approved", "rejected", "pending"].includes(status)) {
-        throw new ApiError(400, "Invalid status value");
+    if (candidateUser.applicationStatus !== "approved") {
+        throw new ApiError(400, "Candidate is not approved yet");
     }
+    const { name, email, phone, address, documents, dob, education, photoUrl } = candidateUser;
 
-    const candidate = await Candidate.findById(id);
-    if (!candidate) {
-        throw new ApiError(404, "Candidate not found");
+    const newUser = await User.create({
+        fullName: name,
+        email: email,
+        password: generatePassword(name, dob)
+    })
+    const newEmployee = await Employee.create({
+        phone, address, documents, dob, education, photoUrl
+    })
+
+    if (!newUser && !newEmployee) {
+        throw new ApiError(500, "Something Went wrong employee not created!");
     }
-
-    candidate.applicationStatus = status;
-    await candidate.save();
-
-    res.status(200).json(new ApiResponse(200, candidate, "Status updated successfully"));
-});
-
-
-
+    await Candidate.findByIdAndDelete(cadidateId);
+    res.status(201).json(
+        new ApiResponse(200, newUser, "Employee Created successfully!")
+    );
+})
 
 
 export {
-    apply,
     userRegistration,
     loginUser,
     logoutUser,
-    getSubmissions,
-    getSubmissionsById,
     getMe,
-    updateCandidateStatus
+    addEmployee
 }
