@@ -5,7 +5,10 @@ const employeeSchema = new Schema({
         type: String,
         required: true,
     },
-
+    userId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User"
+    },
     phone: {
         type: String, // Phone as string for flexibility
         required: true,
@@ -38,6 +41,41 @@ const employeeSchema = new Schema({
             required: true,
         },
     },
+    bankDetails: {
+        bankName: { type: String, required: true },
+        accountNumber: { type: String, required: true },
+        accountHolderName: { type: String, required: true },
+        ifscCode: { type: String, required: true }
+    },
+
+    documentNumbers: {
+        panCardNumber: { type: String, required: true },
+        aadhaarCardNumber: { type: String, required: true }
+    },
+    salary: {
+        type: Number,
+        required: true,
+        default: 0
+    },
+    allowances: {
+        hra: { type: Number, default: 0 },
+        conveyance: { type: Number, default: 0 },
+        medical: { type: Number, default: 0 },
+    },
+    incentives: {
+        monthly: { type: Number, default: 0 },
+        yearly: { type: Number, default: 0 },
+    },
+    deductions: {
+        pf: { type: Number, default: 0 },
+        tds: { type: Number, default: 0 },
+        other: { type: Number, default: 0 }
+    },
+    netSalary: {
+        type: Number,
+        default: 0
+    }
+
 
 }, { timestamps: true });
 

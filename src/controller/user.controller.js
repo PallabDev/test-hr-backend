@@ -148,55 +148,242 @@ function generatePassword(name, dob) {
     return `${firstName}${birthYear}`;
 }
 
-const addJob = asyncHandler(async (req, res) => {
-    const { id } = req.user
-    const adminUser = await User.findById(id);
-    if (!adminUser && (adminUser.role !== "admin")) {
-        throw new ApiError(400, "Unauthorized Request!");
-    }
-
-
-})
-
 const addEmployee = asyncHandler(async (req, res) => {
     const { id } = req.user;
-    const isAdminUser = await User.findOne({ _id: id });
-    if (!isAdminUser && isAdminUser.role !== "admin") {
-        throw new ApiError(404, "Unauthorized Request");
+
+    // Check admin
+    const isAdminUser = await User.findById(id);
+    if (!isAdminUser || isAdminUser.role !== "admin") {
+        throw new ApiError(403, "Unauthorized Request");
     }
-    const { cadidateId } = req.body;
-    const candidateUser = await Candidate.findOne({ _id: cadidateId });
+
+    const { candidateId, salary } = req.body;
+    console.log(candidateId, salary)
+    // Fetch candidate
+    const candidateUser = await Candidate.findById(candidateId);
     if (!candidateUser) {
         throw new ApiError(404, "Candidate not found");
     }
+
     if (candidateUser.applicationStatus !== "approved") {
         throw new ApiError(400, "Candidate is not approved yet");
     }
-    const { name, email, phone, address, documents, dob, education, photoUrl } = candidateUser;
 
+    const {
+        name,
+        email,
+        phone,
+        address,
+        documents,
+        dob,
+        education,
+        photoUrl,
+        bankDetails,
+        documentNumbers,
+    } = candidateUser;
+
+    // Create user account
     const newUser = await User.create({
         fullName: name,
         email: email,
-        password: generatePassword(name, dob)
-    })
+        password: generatePassword(name, dob),
+        role: "employee" // optionally set role
+    });
+
+    // Create employee record
     const newEmployee = await Employee.create({
-        phone, address, documents, dob, education, photoUrl
-    })
+        fullName: name,
+        phone,
+        address,
+        documents,
+        dob,
+        education,
+        photoUrl,
+        documentNumbers,
+        bankDetails,
+        salary,
+        userId: newUser._id
+    });
 
-    if (!newUser && !newEmployee) {
-        throw new ApiError(500, "Something Went wrong employee not created!");
+    if (!newUser || !newEmployee) {
+        throw new ApiError(500, "Something went wrong. Employee not created!");
     }
-    await Candidate.findByIdAndDelete(cadidateId);
-    res.status(201).json(
-        new ApiResponse(200, newUser, "Employee Created successfully!")
-    );
-})
 
+    // Delete candidate after successful creation
+    await Candidate.findByIdAndDelete(candidateId);
+
+    res.status(201).json(
+        new ApiResponse(200, newUser, "Employee created successfully!")
+    );
+});
+
+
+const getApprovedEmployee = asyncHandler(async (req, res) => {
+    const { id } = req.user;
+
+    // Check admin
+    const isAdminUser = await User.findById(id);
+    if (!isAdminUser || isAdminUser.role !== "admin") {
+        throw new ApiError(403, "Unauthorized Request");
+    }
+
+    // Aggregation to get approved candidates with job details
+    const approvedCandidates = await Candidate.aggregate([
+        { $match: { applicationStatus: "approved" } }, // only approved
+        { $unwind: "$applyFor" },                        // unwind applyFor array
+        {
+            $lookup: {
+                from: "jobs",            // MongoDB collection name for jobs
+                localField: "applyFor", // candidate's job id
+                foreignField: "_id",    // job _id
+                as: "jobDetails"
+            }
+        },
+        { $unwind: "$jobDetails" }, // flatten jobDetails array
+        {
+            $project: {
+                _id: 1,
+                name: 1,
+                email: 1,
+                applicationStatus: 1,
+                bankDetails: 1,
+                documentNumbers: 1,
+                photoUrl: 1,
+                jobDetails: 1
+            }
+        }
+    ]);
+
+    if (!approvedCandidates || approvedCandidates.length === 0) {
+        throw new ApiError(404, "No approved candidates found");
+    }
+
+    res.status(200).json(
+        new ApiResponse(200, { approvedCandidates }, "Approved Candidates Fetched Successfully!")
+    );
+});
+
+
+
+
+
+// Get all employees or a single employee by ID
+const getEmployee = asyncHandler(async (req, res) => {
+    const { id } = req.user;
+
+    // Check admin
+    const isAdminUser = await User.findById(id);
+    if (!isAdminUser || isAdminUser.role !== "admin") {
+        throw new ApiError(403, "Unauthorized Request");
+    }
+
+    const { employeeId } = req.query; // optional filter
+
+    let matchStage = {};
+    if (employeeId) {
+        matchStage = { _id: new mongoose.Types.ObjectId(employeeId) };
+    }
+
+    const employees = await Employee.aggregate([
+        { $match: matchStage },
+        {
+            $lookup: {
+                from: "users", // collection name in MongoDB
+                localField: "userId", // field in Employee that references User
+                foreignField: "_id",
+                as: "userDetails"
+            }
+        },
+        { $unwind: "$userDetails" },
+        {
+            $project: {
+                _id: 1,
+                userId: 1,
+                fullName: "$userDetails.fullName",
+                phone: 1,
+                email: "$userDetails.email",
+                salary: 1,
+                allowances: 1,
+                incentives: 1,
+                deductions: 1,
+                netSalary: 1
+            }
+        }
+    ]);
+
+    console.log(employees)
+    if (employeeId && employees.length === 0) {
+        throw new ApiError(404, "Employee not found");
+    }
+
+    res.status(200).json(
+        new ApiResponse(200, employees, "Employee(s) fetched successfully")
+    );
+});
+
+
+// Update employee salary section
+const updateEmployeeSalary = asyncHandler(async (req, res) => {
+    const { id } = req.user;
+
+    // Check admin
+    const isAdminUser = await User.findById(id);
+    if (!isAdminUser || isAdminUser.role !== "admin") {
+        throw new ApiError(403, "Unauthorized Request");
+    }
+
+    const { employeeId, salary, allowances, incentives, deductions } = req.body;
+    if (!employeeId) throw new ApiError(400, "employeeId is required");
+
+    const employee = await Employee.findById(employeeId);
+    if (!employee) throw new ApiError(404, "Employee not found");
+
+    // -----------------------------
+    // Update salary fields intelligently
+    // -----------------------------
+    if (salary !== undefined) employee.salary = salary;
+
+    if (allowances) {
+        for (const key in allowances) {
+            employee.allowances[key] = (employee.allowances[key] || 0) + allowances[key];
+        }
+    }
+
+    if (incentives) {
+        for (const key in incentives) {
+            employee.incentives[key] = (employee.incentives[key] || 0) + incentives[key];
+        }
+    }
+
+    if (deductions) {
+        for (const key in deductions) {
+            employee.deductions[key] = (employee.deductions[key] || 0) + deductions[key];
+        }
+    }
+
+    // -----------------------------
+    // Recalculate netSalary
+    // -----------------------------
+    const totalAllowances = Object.values(employee.allowances).reduce((a, b) => a + b, 0);
+    const totalIncentives = Object.values(employee.incentives).reduce((a, b) => a + b, 0);
+    const totalDeductions = Object.values(employee.deductions).reduce((a, b) => a + b, 0);
+
+    employee.netSalary = employee.salary + totalAllowances + totalIncentives - totalDeductions;
+
+    await employee.save();
+
+    res.status(200).json(
+        new ApiResponse(200, employee, "Employee salary updated successfully")
+    );
+});
 
 export {
     userRegistration,
     loginUser,
     logoutUser,
     getMe,
-    addEmployee
-}
+    addEmployee,
+    getApprovedEmployee,
+    getEmployee,
+    updateEmployeeSalary
+};

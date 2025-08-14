@@ -14,16 +14,19 @@ const apply = asyncHandler(async (req, res) => {
         institute,
         specialization,
         achievements,
+        jobId,
+        bankName,
+        accountNumber,
+        accountHolderName,
+        ifscCode,
+        panCardNumber,
+        aadhaarCardNumber
     } = req.body;
-
-    // multer puts files in req.files as arrays
-    // Expect files with keys: photo, resume, idProof, galleryImages (multiple)
 
     if (!req.files) {
         return res.status(400).json({ message: "Files are required" });
     }
 
-    // Validate required files
     const photoFile = req.files.photo?.[0];
     const resumeFile = req.files.resume?.[0];
     const idProofFile = req.files.idProof?.[0];
@@ -33,9 +36,9 @@ const apply = asyncHandler(async (req, res) => {
         return res.status(400).json({ message: "Photo, Resume and ID Proof are required" });
     }
 
-    const userExist = await Candidate.findOne({ email: email })
+    const userExist = await Candidate.findOne({ email });
     if (userExist) {
-        throw new ApiError(409, "User with email already exists")
+        throw new ApiError(409, "User with email already exists");
     }
 
     // Upload files to Cloudinary
@@ -52,9 +55,6 @@ const apply = asyncHandler(async (req, res) => {
         }
     }
 
-    // Delete local files after upload (optional if you didn't do it in uploader)
-    // fs.unlinkSync(photoFile.path); and same for others
-
     // Create candidate document
     const candidate = await Candidate.create({
         name,
@@ -62,11 +62,22 @@ const apply = asyncHandler(async (req, res) => {
         phone,
         address,
         dob,
+        applyFor: jobId,
         education: {
             institute,
             specialization,
         },
         achievements,
+        bankDetails: {
+            bankName,
+            accountNumber,
+            accountHolderName,
+            ifscCode
+        },
+        documentNumbers: {
+            panCardNumber,
+            aadhaarCardNumber
+        },
         photoUrl: photoUpload.url,
         documents: {
             resumeUrl: resumeUpload.url,
@@ -80,6 +91,7 @@ const apply = asyncHandler(async (req, res) => {
         candidate,
     });
 });
+
 
 const getSubmissions = asyncHandler(async (req, res) => {
     const candidates = await Candidate.find().sort({ createdAt: -1 }); // newest first

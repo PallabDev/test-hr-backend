@@ -28,6 +28,12 @@ app.use("/api/v1/user/", userRouter);
 
 import candidateRouter from "./routes/cadidate.routes.js"
 app.use("/api/v1/candidate/", candidateRouter);
+
+
+import jobRouter from "./routes/job.routes.js";
+app.use("/api/v1/jobs/", jobRouter);
+
+
 app.get("/uptime", (_, res) => {
     res.status(200).json({ status: "Up and Running" })
 })
