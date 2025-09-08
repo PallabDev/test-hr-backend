@@ -2,6 +2,7 @@ import express from "express"
 import cors from "cors"
 import cookieParser from "cookie-parser";
 import { client } from "./whatsappClient.js";
+
 const app = express();
 app.use(cors({
     origin: process.env.ORIGIN,
